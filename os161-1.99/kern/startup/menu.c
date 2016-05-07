@@ -54,6 +54,8 @@
 
 #define MAXMENUARGS  16
 
+extern uint32_t dbflags;
+
 // XXX this should not be in this file
 void
 getinterval(time_t s1, uint32_t ns1, time_t s2, uint32_t ns2,
@@ -260,6 +262,21 @@ cmd_sync(int nargs, char **args)
 }
 
 /*
+ * Command for enabling DB_THREADS debugging messages
+ */
+static
+int
+cmd_dth(int nargs, char **args)
+{
+	(void)nargs;
+	(void)args;
+
+	dbflags = DB_THREADS;
+
+	return 0;
+}
+
+/*
  * Command for doing an intentional panic.
  */
 static
@@ -435,6 +452,7 @@ static const char *opsmenu[] = {
 	"[cd]      Change directory          ",
 	"[pwd]     Print current directory   ",
 	"[sync]    Sync filesystems          ",
+	"[dth]     Enable DB_THREADS         ",
 	"[panic]   Intentional panic         ",
 	"[q]       Quit and shut down        ",
 	NULL
@@ -545,6 +563,7 @@ static struct {
 	{ "cd",		cmd_chdir },
 	{ "pwd",	cmd_pwd },
 	{ "sync",	cmd_sync },
+	{ "dth",	cmd_dth },
 	{ "panic",	cmd_panic },
 	{ "q",		cmd_quit },
 	{ "exit",	cmd_quit },
