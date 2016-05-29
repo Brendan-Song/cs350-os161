@@ -76,7 +76,6 @@ struct lock {
         char *lk_name;
         struct wchan *lk_wchan;
 	struct cpu *lk_holder;
-//	struct spinlock lk_spinlock;
 	volatile bool locked;
 };
 
@@ -115,8 +114,7 @@ void lock_destroy(struct lock *);
 
 struct cv {
         char *cv_name;
-        // add what you need here
-        // (don't forget to mark things volatile as needed)
+	struct wchan *cv_wchan;
 };
 
 struct cv *cv_create(const char *name);
