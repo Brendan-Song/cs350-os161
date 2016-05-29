@@ -34,6 +34,8 @@
 
 #include <types.h>
 #include <lib.h>
+#include <cpu.h>
+#include <spl.h>
 #include <spinlock.h>
 #include <wchan.h>
 #include <thread.h>
@@ -162,8 +164,18 @@ lock_create(const char *name)
                 kfree(lock);
                 return NULL;
         }
-        
-        // add stuff here as needed
+
+	lock->lk_wchan = wchan_create(lock->lk_name);
+	if (lock->lk_wchan == NULL) {
+		kfree(lock->lk_name);
+		kfree(lock);
+		return NULL;
+	}
+	
+	//spinlock_init(&lock->lk_spinlock);	
+	
+	lock->lk_holder = NULL;
+	lock->locked = false;
         
         return lock;
 }
@@ -172,9 +184,10 @@ void
 lock_destroy(struct lock *lock)
 {
         KASSERT(lock != NULL);
-
-        // add stuff here as needed
-        
+	KASSERT(lock->lk_holder == NULL);        
+//	spinlock_cleanup(&lock->lk_spinlock);
+	wchan_destroy(lock->lk_wchan);
+//	kfree(lock->lk_holder);
         kfree(lock->lk_name);
         kfree(lock);
 }
@@ -182,27 +195,84 @@ lock_destroy(struct lock *lock)
 void
 lock_acquire(struct lock *lock)
 {
-        // Write this
+	KASSERT(lock != NULL);
+	struct cpu *mycpu;
+	splraise(IPL_NONE, IPL_HIGH);
 
-        (void)lock;  // suppress warning until code gets written
+	if (CURCPU_EXISTS()) {
+		mycpu = curcpu->c_self;
+		if (lock->lk_holder == mycpu) {
+			panic("Deadlock on lock %p\n", lock);
+		}
+	} else {
+		mycpu = NULL;
+	}
+
+	if (lock->locked) {
+		wchan_lock(lock->lk_wchan);
+		wchan_sleep(lock->lk_wchan);
+	}
+	lock->locked = true;
+	lock->lk_holder = mycpu;
+/*
+//	struct cpu *mycpu;
+
+//	if (CURCPU_EXISTS()) {
+//		mycpu = curthread->t_cpu->c_self;
+//		if (lock->lk_holder == mycpu) {
+//			panic("Deadlock on lock %p\n", lock);
+//		}
+//	} else {
+//		mycpu = NULL;
+//	}
+	spinlock_acquire(&lock->lk_spinlock);
+	if (lock->locked) {
+		wchan_lock(lock->lk_wchan);
+		spinlock_release(&lock->lk_spinlock);
+		wchan_sleep(lock->lk_wchan);
+		spinlock_acquire(&lock->lk_spinlock);
+	}
+	lock->locked = true;
+	lock->lk_holder = curthread;
+	KASSERT(lock->locked);
+	spinlock_release(&lock->lk_spinlock);*/
 }
 
 void
 lock_release(struct lock *lock)
 {
-        // Write this
+	if (CURCPU_EXISTS()) {
+		KASSERT(lock->lk_holder == curcpu->c_self);
+	}
 
-        (void)lock;  // suppress warning until code gets written
+	lock->lk_holder = NULL;
+	lock->locked = false;
+	spllower(IPL_HIGH, IPL_NONE);
+
+/*	spinlock_acquire(&lock->lk_spinlock);
+	if (lock != NULL && lock->lk_holder == curthread) {
+	KASSERT(lock != NULL);
+	//KASSERT(lock->lk_holder == curthread);
+	//KASSERT(lock->locked);
+	
+	//spinlock_acquire(&lock->lk_spinlock);
+	lock->lk_holder = NULL;
+	lock->locked = false;
+	//KASSERT(!lock->locked);
+	wchan_wakeone(lock->lk_wchan);
+	}
+	spinlock_release(&lock->lk_spinlock);
+
+	//spinlock_release(&lock->lk_spinlock);*/
 }
 
 bool
 lock_do_i_hold(struct lock *lock)
 {
-        // Write this
-
-        (void)lock;  // suppress warning until code gets written
-
-        return true; // dummy until code gets written
+	if (!CURCPU_EXISTS()) {
+		return true;
+	}
+	return (lock->lk_holder == curcpu->c_self);
 }
 
 ////////////////////////////////////////////////////////////
