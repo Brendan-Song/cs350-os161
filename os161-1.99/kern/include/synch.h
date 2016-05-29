@@ -74,8 +74,10 @@ void V(struct semaphore *);
  */
 struct lock {
         char *lk_name;
-        // add what you need here
-        // (don't forget to mark things volatile as needed)
+        struct wchan *lk_wchan;
+	struct cpu *lk_holder;
+//	struct spinlock lk_spinlock;
+	volatile bool locked;
 };
 
 struct lock *lock_create(const char *name);
@@ -139,3 +141,5 @@ void cv_broadcast(struct cv *cv, struct lock *lock);
 
 
 #endif /* _SYNCH_H_ */
+
+
