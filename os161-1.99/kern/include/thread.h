@@ -36,9 +36,11 @@
  * Note: curthread is defined by <current.h>.
  */
 
+#include "opt-A2.h"
 #include <array.h>
 #include <spinlock.h>
 #include <threadlist.h>
+#include <mainbus.h>
 
 struct cpu;
 
@@ -105,7 +107,9 @@ struct thread {
 	 * Public fields
 	 */
 
-	/* add more here as needed */
+#if OPT_A2
+	pid_t t_pid;
+#endif
 };
 
 /*
@@ -168,5 +172,9 @@ void schedule(void);
  */
 void thread_consider_migration(void);
 
+#if OPT_A2
+int tf_copy(struct trapframe *src, struct trapframe *tf);
+void thread_entrypoint(void *tf, unsigned long thread_pid);
+#endif
 
 #endif /* _THREAD_H_ */

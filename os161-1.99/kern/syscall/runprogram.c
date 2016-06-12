@@ -33,6 +33,7 @@
  * that execv() needs to do more than this function does.
  */
 
+#include "opt-A2.h"
 #include <types.h>
 #include <kern/errno.h>
 #include <kern/fcntl.h>

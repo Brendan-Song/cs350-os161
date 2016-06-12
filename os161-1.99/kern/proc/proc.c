@@ -42,6 +42,7 @@
  * process that will have more than one thread is the kernel process.
  */
 
+#include "opt-A2.h"
 #include <types.h>
 #include <proc.h>
 #include <current.h>
@@ -101,6 +102,9 @@ proc_create(const char *name)
 
 #ifdef UW
 	proc->console = NULL;
+#if OPT_A2
+	proc->p_pid = (pid_t)proc_count;
+#endif
 #endif // UW
 
 	return proc;
@@ -323,6 +327,16 @@ proc_remthread(struct thread *t)
 	spinlock_release(&proc->p_lock);
 	panic("Thread (%p) has escaped from its process (%p)\n", t, proc);
 }
+
+#if OPT_A2
+int
+proc_setPid(struct proc *proc) {
+  P(proc_count_mutex);
+  proc->p_pid = (pid_t)proc_count;
+  V(proc_count_mutex);
+  return 0;
+}
+#endif
 
 /*
  * Fetch the address space of the current process. Caution: it isn't

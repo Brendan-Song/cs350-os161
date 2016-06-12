@@ -36,6 +36,7 @@
  * Note: curproc is defined by <current.h>.
  */
 
+#include "opt-A2.h"
 #include <spinlock.h>
 #include <thread.h> /* required for struct threadarray */
 
@@ -69,6 +70,9 @@ struct proc {
 #endif
 
 	/* add more material here as needed */
+#if OPT_A2
+  pid_t p_pid;
+#endif
 };
 
 /* This is the process structure for the kernel and for kernel-only threads. */
@@ -93,6 +97,10 @@ int proc_addthread(struct proc *proc, struct thread *t);
 
 /* Detach a thread from its process. */
 void proc_remthread(struct thread *t);
+
+#if OPT_A2
+int proc_setPid(struct proc *proc);
+#endif
 
 /* Fetch the address space of the current process. */
 struct addrspace *curproc_getas(void);

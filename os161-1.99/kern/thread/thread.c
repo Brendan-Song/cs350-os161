@@ -33,6 +33,7 @@
 
 #define THREADINLINE
 
+#include "opt-A2.h"
 #include <types.h>
 #include <kern/errno.h>
 #include <lib.h>
@@ -150,6 +151,9 @@ thread_create(const char *name)
 	thread->t_iplhigh_count = 1; /* corresponding to t_curspl */
 
 	/* If you add to struct thread, be sure to initialize here */
+#if OPT_A2
+	//thread->t_pid = curproc->p_pid;
+#endif
 
 	return thread;
 }
