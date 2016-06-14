@@ -63,6 +63,13 @@ struct proc *kproc;
 #ifdef UW
 /* count of the number of processes, excluding kproc */
 static volatile unsigned int proc_count;
+#if OPT_A2
+static volatile unsigned int pid_count;
+static struct lock *pid_count_lock;
+//static struct lock *proc_lock;
+//static struct lock *pm_procs_lock;
+static struct pm *pm;
+#endif
 /* provides mutual exclusion for proc_count */
 /* it would be better to use a lock here, but we use a semaphore because locks are not implemented in the base kernel */ 
 static struct semaphore *proc_count_mutex;
@@ -70,7 +77,76 @@ static struct semaphore *proc_count_mutex;
 struct semaphore *no_proc_sem;   
 #endif  // UW
 
+#if OPT_A2
+////////////////////////////////////////////////////////////////////////
+//
+// Process Manager
 
+static
+struct pm *
+pm_create(void)
+{
+  struct pm *procmgr;
+
+  procmgr = kmalloc(sizeof(struct pm));
+  if (procmgr == NULL) {
+    panic("Unable to create process manager");
+  }
+  
+  //spinlock_init(pm_procs_lock);
+  //pm_procs_lock = lock_create("pm_procs_lock");
+
+  //procmgr->procs = struct *proc[PID_MAX + 1];
+
+  return procmgr;
+}
+
+int
+pm_get_new_pid(void)
+{
+  KASSERT(lock_do_i_hold(pid_count_lock));
+  for (int i = 0; i < PID_MAX; i++) {
+    int index = (pid_count + i) % (PID_MAX + 1);
+    if (pm->procs[index] == NULL && index != 0) {
+      return index;
+    }
+  }
+  return 0;
+}
+
+int
+pm_orphan_children(pid_t pid)
+{
+  for (int i = 1; i <= PID_MAX; i++) {
+    if (pm->procs[i] && pm->procs[i]->p_parentpid == pid) {
+      pm->procs[i]->p_parentpid = 0;
+    }
+  }
+  return 0;
+}
+
+int
+pm_remove_proc(int pid)
+{
+  if (pid > 0 && pid <= PID_MAX) {
+    pm->procs[pid] = NULL;
+  }
+  return 0;
+}
+
+int
+pm_add_proc(int pid, struct proc *proc)
+{
+  KASSERT(lock_do_i_hold(pid_count_lock));
+  if (pm->procs[pid] != NULL) {
+    return 1;
+  } else {
+    KASSERT(proc->p_pid == (pid_t)pid);
+    pm->procs[pid] = proc;
+  }
+  return 0;
+}
+#endif
 
 /*
  * Create a proc structure.
@@ -103,7 +179,11 @@ proc_create(const char *name)
 #ifdef UW
 	proc->console = NULL;
 #if OPT_A2
-	proc->p_pid = (pid_t)proc_count;
+	//lock_acquire(pm_procs_lock);
+	//proc->p_pid = (pid_t)pm_get_new_pid();
+	//lock_release(pm_procs_lock);
+	//proc->p_pid = (pid_t)pid_count;
+	proc->p_cv = cv_create("proc_cv");
 #endif
 #endif // UW
 
@@ -170,6 +250,17 @@ proc_destroy(struct proc *proc)
 	threadarray_cleanup(&proc->p_threads);
 	spinlock_cleanup(&proc->p_lock);
 
+#if OPT_A2
+	/*if (proc_lock == NULL) {
+	  proc_lock = lock_create("proc_lock");
+	}
+	lock_acquire(proc_lock);
+	if (proc->p_parentpid != 0) {
+	  cv_broadcast(proc->p_cv, proc_lock);
+	}
+	lock_release(proc_lock);*/
+#endif
+
 	kfree(proc->p_name);
 	kfree(proc);
 
@@ -211,6 +302,11 @@ proc_bootstrap(void)
   if (no_proc_sem == NULL) {
     panic("could not create no_proc_sem semaphore\n");
   }
+#if OPT_A2
+  pid_count = 0;
+  pid_count_lock = lock_create("pid_count_lock");
+  //pm = pm_create();
+#endif
 #endif // UW 
 }
 
@@ -265,6 +361,22 @@ proc_create_runprogram(const char *name)
 	}
 	spinlock_release(&curproc->p_lock);
 #endif // UW
+
+#if OPT_A2
+	if (pm == NULL) {
+	  pm = pm_create();
+	}
+	lock_acquire(pid_count_lock);
+	pid_count++;
+	proc->p_pid = (pid_t)pm_get_new_pid();
+	if (curproc->p_pid != proc->p_pid) {
+          proc->p_parentpid = curproc->p_pid;
+	} else {
+	  proc->p_parentpid = 0;
+	}
+	pm_add_proc((int)proc->p_pid, proc);
+	lock_release(pid_count_lock);
+#endif
 
 #ifdef UW
 	/* increment the count of processes */

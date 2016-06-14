@@ -39,12 +39,27 @@
 #include "opt-A2.h"
 #include <spinlock.h>
 #include <thread.h> /* required for struct threadarray */
+#include <limits.h>
 
 struct addrspace;
 struct vnode;
 #ifdef UW
 struct semaphore;
 #endif // UW
+
+#if OPT_A2
+/*
+ * Process manager structure
+ */
+struct pm {
+  struct proc *procs[PID_MAX + 1];
+};
+
+int pm_get_new_pid(void);
+int pm_orphan_children(pid_t pid);
+int pm_remove_proc(int pid);
+int pm_add_proc(int pid, struct proc *proc);
+#endif
 
 /*
  * Process structure.
@@ -71,7 +86,11 @@ struct proc {
 
 	/* add more material here as needed */
 #if OPT_A2
-  pid_t p_pid;
+  struct cv *p_cv; // condition variable to have the parent wait on
+  pid_t p_pid; // pid of this process
+  pid_t p_parentpid; // pid of the parent
+  int p_exitcode;
+  bool p_exited;
 #endif
 };
 

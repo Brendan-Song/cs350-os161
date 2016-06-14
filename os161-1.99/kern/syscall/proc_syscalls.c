@@ -11,7 +11,12 @@
 #include <addrspace.h>
 #include <copyinout.h>
 #include <machine/trapframe.h>
+#include <synch.h>
 
+#if OPT_A2
+static struct lock *thread_fork_lock; // mutex for forking threads
+static struct lock *proc_exit_lock;
+#endif
   /* this implementation of sys__exit does not do anything with the exit code */
   /* this needs to be fixed to get exit() and waitpid() working properly */
 
@@ -23,7 +28,23 @@ void sys__exit(int exitcode) {
      an unused variable */
   (void)exitcode;
 
+  if (proc_exit_lock == NULL) {
+    proc_exit_lock = lock_create("proc_exit_lock");
+  }
+
   DEBUG(DB_SYSCALL,"Syscall: _exit(%d)\n",exitcode);
+
+#if OPT_A2
+  lock_acquire(proc_exit_lock);
+  curproc->p_exitcode = exitcode;
+  curproc->p_exited = true;
+  pm_orphan_children(curproc->p_pid);
+  pm_remove_proc((int)curproc->p_pid);
+  if (curproc->p_parentpid != 0) {
+    cv_broadcast(curproc->p_cv, proc_exit_lock);
+  }
+  lock_release(proc_exit_lock);
+#endif
 
   KASSERT(curproc->p_addrspace != NULL);
   as_deactivate();
@@ -99,59 +120,20 @@ sys_waitpid(pid_t pid,
 }
 
 #if OPT_A2
-/*int
-tf_copy(struct trapframe *src, struct trapframe *tf)
-{
-  tf->tf_vaddr = src->tf_vaddr;
-  tf->tf_status = src->tf_status;
-  tf->tf_cause = src->tf_cause;
-  tf->tf_lo = src->tf_lo;
-  tf->tf_hi = src->tf_hi;
-  tf->tf_ra = src->tf_ra;
-  tf->tf_at = src->tf_at;
-  tf->tf_v0 = src->tf_v0;
-  tf->tf_v1 = src->tf_v1;
-  tf->tf_a0 = src->tf_a0;
-  tf->tf_a1 = src->tf_a1;
-  tf->tf_a2 = src->tf_a2;
-  tf->tf_a3 = src->tf_a3;
-  tf->tf_t0 = src->tf_t0;
-  tf->tf_t1 = src->tf_t1;
-  tf->tf_t2 = src->tf_t2;
-  tf->tf_t3 = src->tf_t3;
-  tf->tf_t4 = src->tf_t4;
-  tf->tf_t5 = src->tf_t5;
-  tf->tf_t6 = src->tf_t6;
-  tf->tf_t7 = src->tf_t7;
-  tf->tf_s0 = src->tf_s0;
-  tf->tf_s1 = src->tf_s1;
-  tf->tf_s2 = src->tf_s2;
-  tf->tf_s3 = src->tf_s3;
-  tf->tf_s4 = src->tf_s4;
-  tf->tf_s5 = src->tf_s5;
-  tf->tf_s6 = src->tf_s6;
-  tf->tf_s7 = src->tf_s7;
-  tf->tf_t8 = src->tf_t8;
-  tf->tf_t9 = src->tf_t9;
-  tf->tf_k0 = src->tf_k0;
-  tf->tf_k1 = src->tf_k1;
-  tf->tf_gp = src->tf_gp;
-  tf->tf_sp = src->tf_sp;
-  tf->tf_s8 = src->tf_s8;
-  tf->tf_epc = src->tf_epc;
-  return 0;
-}*/
 static
 void
 child_entrypoint(void *tf,
-		 unsigned long thread_pid)
+		 unsigned long unused)
 {
-  (void)thread_pid;
+  struct trapframe *tempTF;
+  tempTF = (struct trapframe *)tf;
+  tempTF->tf_v0 = 0; // set return value to 0 to indicate child
+  tempTF->tf_a3 = 0;
+  tempTF->tf_epc += 4; // increment PC
+  // Copy modified trapframe to stack
   struct trapframe childTF;
-  struct trapframe *tempTF = tf;
   childTF = *tempTF;
-  kfree(tempTF);
-  //struct trapframe *childTF = (struct trapframe*)kmalloc(sizeof(struct trapframe));
+  (void)unused; // avoid warning
   enter_forked_process(&childTF);
 }
 
@@ -159,30 +141,28 @@ int
 sys_fork(struct trapframe *tf, pid_t *retval) {
   int error = 0;
 
+  // Initialize lock
+  if (thread_fork_lock == NULL) {
+    thread_fork_lock = lock_create("thread_fork_lock");
+  }
+
   // Create new child process
   struct proc *child;
   child = proc_create_runprogram("childProc");
+  if (child == NULL) {
+    panic("fork: could not create child process");
+  }
 
   // Create and copy address space
-  struct addrspace *as = as_create();
-  if (as == NULL) {
-    panic("fork: out of memory"); // out of memory
-  }
-  error = as_copy(curproc_getas(), &as);
-  if (error) {
-    panic("fork: as_copy returned an error"); // as_copy returned an error
-  }
-
-  // Set child addrspace to copied addrspace
   spinlock_acquire(&child->p_lock);
-  child->p_addrspace = as;
+  error = as_copy(curproc_getas(), &child->p_addrspace);
+  if (error) {
+    panic("fork: as_copy returned an error");
+  }
   spinlock_release(&child->p_lock);
 
-  // Set child PID
-  error = proc_setPid(child);
-
   // Create thread for child process
-  // disable interrupts
+  lock_acquire(thread_fork_lock);
   struct trapframe* childTF = kmalloc(sizeof(struct trapframe));
   *childTF = *tf;
   error = thread_fork("childThread", 
@@ -190,6 +170,18 @@ sys_fork(struct trapframe *tf, pid_t *retval) {
 		      child_entrypoint, 
 		      childTF,
 		      (int)retval);
+  if (error) {
+    panic("fork: thread_fork returned an error");
+  }
+  lock_release(thread_fork_lock);
+  /*if (child->p_pid) {
+    kprintf("----------\n");
+    kprintf("Child process: %d\n", child->p_pid);
+  } else {
+    kprintf("----------\n");
+    kprintf("Parent process: %d\n", curproc->p_pid);
+  }*/
+  *retval = child->p_pid;
   // enable interrupts
 /*  struct proc *child = proc_create("childProc");
   struct addrspace *as = curproc_getas();
@@ -202,6 +194,6 @@ sys_fork(struct trapframe *tf, pid_t *retval) {
   as = as_create();
   curproc_setas(as);
   as_activate();*/
-  return(0);	// child
+  return(0);
 }
 #endif
