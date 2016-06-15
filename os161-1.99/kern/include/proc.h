@@ -57,6 +57,7 @@ struct pm {
 
 int pm_get_new_pid(void);
 int pm_orphan_children(pid_t pid);
+struct proc* pm_get_proc_by_pid(pid_t pid);
 int pm_remove_proc(int pid);
 int pm_add_proc(int pid, struct proc *proc);
 #endif

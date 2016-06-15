@@ -120,9 +120,21 @@ pm_orphan_children(pid_t pid)
   for (int i = 1; i <= PID_MAX; i++) {
     if (pm->procs[i] && pm->procs[i]->p_parentpid == pid) {
       pm->procs[i]->p_parentpid = 0;
+      if (pm->procs[i]->p_exited) {
+        pm_remove_proc(i);
+      }
     }
   }
   return 0;
+}
+
+struct proc *
+pm_get_proc_by_pid(pid_t pid)
+{
+  if (pm->procs[(int)pid]) {
+    return pm->procs[(int)pid];
+  }
+  return NULL;
 }
 
 int
@@ -259,6 +271,7 @@ proc_destroy(struct proc *proc)
 	  cv_broadcast(proc->p_cv, proc_lock);
 	}
 	lock_release(proc_lock);*/
+	//pm_remove_proc((int)proc->p_pid);
 #endif
 
 	kfree(proc->p_name);

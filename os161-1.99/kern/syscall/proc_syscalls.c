@@ -39,9 +39,12 @@ void sys__exit(int exitcode) {
   curproc->p_exitcode = exitcode;
   curproc->p_exited = true;
   pm_orphan_children(curproc->p_pid);
-  pm_remove_proc((int)curproc->p_pid);
   if (curproc->p_parentpid != 0) {
     cv_broadcast(curproc->p_cv, proc_exit_lock);
+   // pm_remove_proc((int)curproc->p_pid);
+  }
+  if (curproc->p_parentpid == 0) {
+    pm_remove_proc((int)curproc->p_pid);
   }
   lock_release(proc_exit_lock);
 #endif
@@ -65,7 +68,7 @@ void sys__exit(int exitcode) {
   /* if this is the last user process in the system, proc_destroy()
      will wake up the kernel menu thread */
   proc_destroy(p);
-  
+
   thread_exit();
   /* thread_exit() does not return, so we should never get here */
   panic("return from thread_exit in sys_exit\n");
@@ -109,14 +112,56 @@ sys_waitpid(pid_t pid,
   if (options != 0) {
     return(EINVAL);
   }
+
+#if OPT_A2
+  struct proc *proc;
+  // check that we're not waiting for ourself or an invalid process
+  if (curproc->p_pid == pid || pid <= 0) {
+    return(EINVAL);
+  }
+
+  if (proc_exit_lock == NULL) {
+    proc_exit_lock = lock_create("proc_exit_lock");
+  }
+  lock_acquire(proc_exit_lock);
+
+  proc = pm_get_proc_by_pid(pid);
+  if (proc == NULL) {
+    // make sure child is not null
+    lock_release(proc_exit_lock);
+    return ESRCH;
+  } else if (proc->p_parentpid != curproc->p_pid) {
+    // only parent can call waitpid on its children
+    lock_release(proc_exit_lock);
+    return EPERM;
+  } else if (!proc->p_exited) {
+    // if child has not exited, wait for it
+    cv_wait(proc->p_cv, proc_exit_lock);
+    KASSERT(proc->p_exited);
+  }
+  exitstatus = proc->p_exitcode;
+  proc->p_parentpid = 0;
+  pm_remove_proc((int)pid);
+
+  //lock_release(proc_exit_lock);
+
+  exitstatus = _MKWAIT_EXIT(exitstatus);
+  result = copyout((void *)&exitstatus,status,sizeof(int));
+  *retval = pid;
+
+  lock_release(proc_exit_lock);
+  return result;
+
+#else
   /* for now, just pretend the exitstatus is 0 */
-  exitstatus = 0;
+  *exitstatus = 0;
   result = copyout((void *)&exitstatus,status,sizeof(int));
   if (result) {
     return(result);
   }
   *retval = pid;
   return(0);
+#endif
 }
 
 #if OPT_A2
