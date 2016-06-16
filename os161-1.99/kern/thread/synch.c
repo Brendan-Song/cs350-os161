@@ -174,6 +174,7 @@ lock_create(const char *name)
 	
 	lock->lk_holder = NULL;
 	lock->locked = false;
+	spinlock_init(&lock->lk_spinlock);
         
         return lock;
 }
@@ -185,6 +186,7 @@ lock_destroy(struct lock *lock)
 	KASSERT(lock->lk_holder == NULL);        
 
 	wchan_destroy(lock->lk_wchan);
+	spinlock_cleanup(&lock->lk_spinlock);
         kfree(lock->lk_name);
         kfree(lock);
 }
@@ -193,47 +195,39 @@ void
 lock_acquire(struct lock *lock)
 {
 	KASSERT(lock != NULL);
-	struct cpu *mycpu;
-	splraise(IPL_NONE, IPL_HIGH);
-
-	if (CURCPU_EXISTS()) {
-		mycpu = curcpu->c_self;
-		if (lock->lk_holder == mycpu) {
-			panic("Deadlock on lock %p\n", lock);
-		}
-	} else {
-		mycpu = NULL;
+	spinlock_acquire(&lock->lk_spinlock);
+	while (lock->lk_holder != NULL) {
+          wchan_lock(lock->lk_wchan);
+	  spinlock_release(&lock->lk_spinlock);
+	  wchan_sleep(lock->lk_wchan);
+	  spinlock_acquire(&lock->lk_spinlock);
 	}
-
-	if (lock->locked) {
-		wchan_lock(lock->lk_wchan);
-		wchan_sleep(lock->lk_wchan);
-	}
+	lock->lk_holder = curthread;
 	lock->locked = true;
-	lock->lk_holder = mycpu;
+	spinlock_release(&lock->lk_spinlock);
 }
 
 void
 lock_release(struct lock *lock)
 {
-	if (CURCPU_EXISTS()) {
-		KASSERT(lock->lk_holder == curcpu->c_self);
-	}
-
+	spinlock_acquire(&lock->lk_spinlock);
 	lock->lk_holder = NULL;
 	lock->locked = false;
-	spllower(IPL_HIGH, IPL_NONE);
 	wchan_wakeone(lock->lk_wchan);
-
+	spinlock_release(&lock->lk_spinlock);
 }
 
 bool
 lock_do_i_hold(struct lock *lock)
 {
-	if (!CURCPU_EXISTS()) {
-		return true;
+	bool do_i_hold = false;
+	spinlock_acquire(&lock->lk_spinlock);
+	if (lock->lk_holder == curthread) {
+          KASSERT(lock->locked);
+	  do_i_hold = true;
 	}
-	return (lock->lk_holder == curcpu->c_self);
+	spinlock_release(&lock->lk_spinlock);
+	return do_i_hold;
 }
 
 ////////////////////////////////////////////////////////////

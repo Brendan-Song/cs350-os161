@@ -158,6 +158,14 @@ pm_add_proc(int pid, struct proc *proc)
   }
   return 0;
 }
+
+int
+pm_replace_proc(int pid, struct proc *proc)
+{
+  KASSERT(pm->procs[pid]->p_pid == (pid_t)pid);
+  pm->procs[pid] = proc;
+  return 0;
+}
 #endif
 
 /*
@@ -272,6 +280,7 @@ proc_destroy(struct proc *proc)
 	}
 	lock_release(proc_lock);*/
 	//pm_remove_proc((int)proc->p_pid);
+	cv_destroy(proc->p_cv);
 #endif
 
 	kfree(proc->p_name);

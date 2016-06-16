@@ -15,7 +15,7 @@
 
 #if OPT_A2
 static struct lock *thread_fork_lock; // mutex for forking threads
-static struct lock *proc_exit_lock;
+static struct lock *proc_exit_lock; // mutex for exiting processes
 #endif
   /* this implementation of sys__exit does not do anything with the exit code */
   /* this needs to be fixed to get exit() and waitpid() working properly */
@@ -26,7 +26,10 @@ void sys__exit(int exitcode) {
   struct proc *p = curproc;
   /* for now, just include this to keep the compiler from complaining about
      an unused variable */
+#if OPT_A2
+#else
   (void)exitcode;
+#endif
 
   if (proc_exit_lock == NULL) {
     proc_exit_lock = lock_create("proc_exit_lock");
@@ -36,16 +39,18 @@ void sys__exit(int exitcode) {
 
 #if OPT_A2
   lock_acquire(proc_exit_lock);
-  curproc->p_exitcode = exitcode;
-  curproc->p_exited = true;
-  pm_orphan_children(curproc->p_pid);
-  if (curproc->p_parentpid != 0) {
-    cv_broadcast(curproc->p_cv, proc_exit_lock);
-   // pm_remove_proc((int)curproc->p_pid);
+  p->p_exitcode = exitcode;
+  p->p_exited = true;
+  // destroy link to children
+  pm_orphan_children(p->p_pid);
+  // let anyone waiting know we are about to exit
+  cv_broadcast(p->p_cv, proc_exit_lock);
+  if (p->p_parentpid != 0) { 
+    // don't destroy self until the parent process has exited
+    struct proc *parent = pm_get_proc_by_pid((int)p->p_parentpid);
+    cv_wait(parent->p_cv, proc_exit_lock);
   }
-  if (curproc->p_parentpid == 0) {
-    pm_remove_proc((int)curproc->p_pid);
-  }
+  
   lock_release(proc_exit_lock);
 #endif
 
@@ -114,6 +119,10 @@ sys_waitpid(pid_t pid,
   }
 
 #if OPT_A2
+  if (status == NULL) {
+    return EFAULT;
+  }
+
   struct proc *proc;
   // check that we're not waiting for ourself or an invalid process
   if (curproc->p_pid == pid || pid <= 0) {
@@ -133,7 +142,7 @@ sys_waitpid(pid_t pid,
   } else if (proc->p_parentpid != curproc->p_pid) {
     // only parent can call waitpid on its children
     lock_release(proc_exit_lock);
-    return EPERM;
+    return ECHILD;
   } else if (!proc->p_exited) {
     // if child has not exited, wait for it
     cv_wait(proc->p_cv, proc_exit_lock);
@@ -143,8 +152,7 @@ sys_waitpid(pid_t pid,
   proc->p_parentpid = 0;
   pm_remove_proc((int)pid);
 
-  //lock_release(proc_exit_lock);
-
+  // store exitstatus
   exitstatus = _MKWAIT_EXIT(exitstatus);
   result = copyout((void *)&exitstatus,status,sizeof(int));
   *retval = pid;
@@ -195,14 +203,16 @@ sys_fork(struct trapframe *tf, pid_t *retval) {
   struct proc *child;
   child = proc_create_runprogram("childProc");
   if (child == NULL) {
-    panic("fork: could not create child process");
+    return ENOMEM;
+    //panic("fork: could not create child process");
   }
 
   // Create and copy address space
   spinlock_acquire(&child->p_lock);
   error = as_copy(curproc_getas(), &child->p_addrspace);
   if (error) {
-    panic("fork: as_copy returned an error");
+    return ENOMEM;
+    //panic("fork: as_copy returned an error");
   }
   spinlock_release(&child->p_lock);
 
@@ -216,29 +226,12 @@ sys_fork(struct trapframe *tf, pid_t *retval) {
 		      childTF,
 		      (int)retval);
   if (error) {
-    panic("fork: thread_fork returned an error");
+    return ENOMEM;
+    //panic("fork: thread_fork returned an error");
   }
   lock_release(thread_fork_lock);
-  /*if (child->p_pid) {
-    kprintf("----------\n");
-    kprintf("Child process: %d\n", child->p_pid);
-  } else {
-    kprintf("----------\n");
-    kprintf("Parent process: %d\n", curproc->p_pid);
-  }*/
+  
   *retval = child->p_pid;
-  // enable interrupts
-/*  struct proc *child = proc_create("childProc");
-  struct addrspace *as = curproc_getas();
-  struct thread *t = thread_create("childThread");
-  child->p_addrspace = as;
-  t->t_stack = tf;
-  proc_addthread(child, t);
-  struct addrspace *as;
-  struct vnode *v;
-  as = as_create();
-  curproc_setas(as);
-  as_activate();*/
   return(0);
 }
 #endif
