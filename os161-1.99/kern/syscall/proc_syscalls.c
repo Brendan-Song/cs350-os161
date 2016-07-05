@@ -3,6 +3,7 @@
 #include <kern/errno.h>
 #include <kern/unistd.h>
 #include <kern/wait.h>
+#include <kern/fcntl.h>
 #include <lib.h>
 #include <syscall.h>
 #include <current.h>
@@ -11,6 +12,7 @@
 #include <addrspace.h>
 #include <copyinout.h>
 #include <machine/trapframe.h>
+#include <vfs.h>
 #include <synch.h>
 
 #if OPT_A2
@@ -232,6 +234,75 @@ sys_fork(struct trapframe *tf, pid_t *retval) {
   lock_release(thread_fork_lock);
   
   *retval = child->p_pid;
+  return(0);
+}
+
+int
+sys_execv(userptr_t progname, userptr_t args, pid_t *retval) {
+  // Replaces currently executing program with a newly loaded program image
+  // pid remains unchanged
+  // Process:
+  // Count # of arguments and copy them into the kernel
+  // Copy the program path into the kernel
+  // Open the program file using vfs_open(prog_name, ...)
+  // Create new addr space, set process to the new addr space and activate it
+  // Using the opened prog file, load the prog image using load_elf
+  // Need to copy the arguments into the new addr space
+  // Delete old addr space
+  // Call enter_new_process
+  (void)args;
+  (void)retval;  
+  struct addrspace *as;
+  struct vnode *v;
+  vaddr_t entrypoint, stackptr;
+  int result;
+
+  /* Open the file. */
+  result = vfs_open((char *)progname, O_RDONLY, 0, &v);
+  if (result) {
+    return result;
+  }
+
+  /* We should be a new process. */
+  //KASSERT(curproc_getas() == NULL);
+
+  /* Create a new address space. */
+  as = as_create();
+  if (as ==NULL) {
+    vfs_close(v);
+    return ENOMEM;
+  }
+
+  /* Switch to it and activate it. */
+  curproc_setas(as);
+  as_activate();
+
+  /* Load the executable. */
+  result = load_elf(v, &entrypoint);
+  if (result) {
+    /* p_addrspace will go away when curproc is destroyed */
+    vfs_close(v);
+    return result;
+  }
+
+  /* Done with the file now. */
+  vfs_close(v);
+
+  /* Define the user stack in the address space */
+  result = as_define_stack(as, &stackptr);
+  if (result) {
+    /* p_addrspace will go away when curproc is destroyed */
+    return result;
+  }
+
+  /* Warp to user mode. */
+  enter_new_process(0 /*argc*/, NULL /*userspace addr of argv*/,
+		    stackptr, entrypoint);
+
+  /* enter_new_process does not return. */
+  panic("enter_new_process returned\n");
+  return EINVAL;
+
   return(0);
 }
 #endif

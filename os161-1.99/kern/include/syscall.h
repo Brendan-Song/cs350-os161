@@ -68,6 +68,7 @@ int sys_waitpid(pid_t pid, userptr_t status, int options, pid_t *retval);
 int tf_copy(struct trapframe *src, struct trapframe *tf);
 //static void child_entrypoint(struct trapframe *tf, unsigned long thread_pid);
 int sys_fork(struct trapframe *tf, pid_t *retval);
+int sys_execv(userptr_t progname, userptr_t args, pid_t *retval);
 #endif
 
 #endif // UW

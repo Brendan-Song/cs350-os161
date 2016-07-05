@@ -1,0 +1,275 @@
+This is /u/cs350/bin/cs350_submit for CS350 assignment 2a.
+/u/cs350/bin/cs350_submit: found OS/161 code directory os161-1.99
+/bin/tar -czvf os161kern.tgz --exclude compile os161-1.99/kern
+os161-1.99/kern/
+os161-1.99/kern/dev/
+os161-1.99/kern/dev/generic/
+os161-1.99/kern/dev/generic/beep.c
+os161-1.99/kern/dev/generic/console.c
+os161-1.99/kern/dev/generic/console.h
+os161-1.99/kern/dev/generic/random.h
+os161-1.99/kern/dev/generic/rtclock.h
+os161-1.99/kern/dev/generic/beep.h
+os161-1.99/kern/dev/generic/rtclock.c
+os161-1.99/kern/dev/generic/random.c
+os161-1.99/kern/dev/lamebus/
+os161-1.99/kern/dev/lamebus/con_lser.c
+os161-1.99/kern/dev/lamebus/lrandom_att.c
+os161-1.99/kern/dev/lamebus/lrandom.h
+os161-1.99/kern/dev/lamebus/conf.lamebus
+os161-1.99/kern/dev/lamebus/lser_att.c
+os161-1.99/kern/dev/lamebus/lhd.c
+os161-1.99/kern/dev/lamebus/con_lscreen.c
+os161-1.99/kern/dev/lamebus/lamebus.h
+os161-1.99/kern/dev/lamebus/ltimer.h
+os161-1.99/kern/dev/lamebus/random_lrandom.c
+os161-1.99/kern/dev/lamebus/lnet.c
+os161-1.99/kern/dev/lamebus/lrandom.c
+os161-1.99/kern/dev/lamebus/lhd_att.c
+os161-1.99/kern/dev/lamebus/rtclock_ltimer.c
+os161-1.99/kern/dev/lamebus/lhd.h
+os161-1.99/kern/dev/lamebus/lscreen.c
+os161-1.99/kern/dev/lamebus/lser.h
+os161-1.99/kern/dev/lamebus/lamebus.c
+os161-1.99/kern/dev/lamebus/lser.c
+os161-1.99/kern/dev/lamebus/ltrace.c
+os161-1.99/kern/dev/lamebus/beep_ltimer.c
+os161-1.99/kern/dev/lamebus/ltrace_att.c
+os161-1.99/kern/dev/lamebus/emu_att.c
+os161-1.99/kern/dev/lamebus/ltrace.h
+os161-1.99/kern/dev/lamebus/lscreen.h
+os161-1.99/kern/dev/lamebus/ltimer.c
+os161-1.99/kern/dev/lamebus/emu.c
+os161-1.99/kern/dev/lamebus/lscreen_att.c
+os161-1.99/kern/dev/lamebus/lnet_att.c
+os161-1.99/kern/dev/lamebus/ltimer_att.c
+os161-1.99/kern/dev/lamebus/emu.h
+os161-1.99/kern/syscall/
+os161-1.99/kern/syscall/file_syscalls.c
+os161-1.99/kern/syscall/proc_syscalls.c
+os161-1.99/kern/syscall/time_syscalls.c
+os161-1.99/kern/syscall/runprogram.c
+os161-1.99/kern/syscall/loadelf.c
+os161-1.99/kern/arch/
+os161-1.99/kern/arch/sys161/
+os161-1.99/kern/arch/sys161/dev/
+os161-1.99/kern/arch/sys161/dev/lamebus_machdep.c
+os161-1.99/kern/arch/sys161/startup/
+os161-1.99/kern/arch/sys161/startup/start.S
+os161-1.99/kern/arch/sys161/conf/
+os161-1.99/kern/arch/sys161/conf/conf.arch
+os161-1.99/kern/arch/sys161/include/
+os161-1.99/kern/arch/sys161/include/bus.h
+os161-1.99/kern/arch/sys161/include/maxcpus.h
+os161-1.99/kern/arch/mips/
+os161-1.99/kern/arch/mips/syscall/
+os161-1.99/kern/arch/mips/syscall/syscall.c
+os161-1.99/kern/arch/mips/conf/
+os161-1.99/kern/arch/mips/conf/conf.arch
+os161-1.99/kern/arch/mips/conf/ldscript
+os161-1.99/kern/arch/mips/vm/
+os161-1.99/kern/arch/mips/vm/tlb-mips1.S
+os161-1.99/kern/arch/mips/vm/dumbvm.c
+os161-1.99/kern/arch/mips/vm/ram.c
+os161-1.99/kern/arch/mips/include/
+os161-1.99/kern/arch/mips/include/vm.h
+os161-1.99/kern/arch/mips/include/types.h
+os161-1.99/kern/arch/mips/include/tlb.h
+os161-1.99/kern/arch/mips/include/current.h
+os161-1.99/kern/arch/mips/include/thread.h
+os161-1.99/kern/arch/mips/include/elf.h
+os161-1.99/kern/arch/mips/include/trapframe.h
+os161-1.99/kern/arch/mips/include/spinlock.h
+os161-1.99/kern/arch/mips/include/kern/
+os161-1.99/kern/arch/mips/include/kern/signal.h
+os161-1.99/kern/arch/mips/include/kern/regdefs.h
+os161-1.99/kern/arch/mips/include/kern/types.h
+os161-1.99/kern/arch/mips/include/kern/setjmp.h
+os161-1.99/kern/arch/mips/include/kern/endian.h
+os161-1.99/kern/arch/mips/include/specialreg.h
+os161-1.99/kern/arch/mips/locore/
+os161-1.99/kern/arch/mips/locore/trap.c
+os161-1.99/kern/arch/mips/locore/exception-mips1.S
+os161-1.99/kern/arch/mips/locore/cache-mips161.S
+os161-1.99/kern/arch/mips/thread/
+os161-1.99/kern/arch/mips/thread/threadstart.S
+os161-1.99/kern/arch/mips/thread/switch.S
+os161-1.99/kern/arch/mips/thread/thread_machdep.c
+os161-1.99/kern/arch/mips/thread/switchframe.c
+os161-1.99/kern/arch/mips/thread/switchframe.h
+os161-1.99/kern/arch/mips/thread/cpu.c
+os161-1.99/kern/lib/
+os161-1.99/kern/lib/bswap.c
+os161-1.99/kern/lib/kprintf.c
+os161-1.99/kern/lib/queue.c
+os161-1.99/kern/lib/array.c
+os161-1.99/kern/lib/uio.c
+os161-1.99/kern/lib/misc.c
+os161-1.99/kern/lib/kgets.c
+os161-1.99/kern/lib/bitmap.c
+os161-1.99/kern/startup/
+os161-1.99/kern/startup/menu.c
+os161-1.99/kern/startup/main.c
+os161-1.99/kern/Makefile
+os161-1.99/kern/test/
+os161-1.99/kern/test/fstest.c
+os161-1.99/kern/test/bitmaptest.c
+os161-1.99/kern/test/threadtest.c
+os161-1.99/kern/test/malloctest.c
+os161-1.99/kern/test/uw-tests.c
+os161-1.99/kern/test/nettest.c
+os161-1.99/kern/test/synchtest.c
+os161-1.99/kern/test/arraytest.c
+os161-1.99/kern/test/tt3.c
+os161-1.99/kern/conf/
+os161-1.99/kern/conf/ASST2-OPT
+os161-1.99/kern/conf/ASST1
+os161-1.99/kern/conf/ASST2
+os161-1.99/kern/conf/newvers.sh
+os161-1.99/kern/conf/ASST4
+os161-1.99/kern/conf/config
+os161-1.99/kern/conf/ASST5
+os161-1.99/kern/conf/ASST3
+os161-1.99/kern/conf/ASST3-OPT
+os161-1.99/kern/conf/conf.kern
+os161-1.99/kern/conf/ASST0
+os161-1.99/kern/fs/
+os161-1.99/kern/fs/sfs/
+os161-1.99/kern/fs/sfs/sfs_vnode.c
+os161-1.99/kern/fs/sfs/sfs_fs.c
+os161-1.99/kern/fs/sfs/sfs_io.c
+os161-1.99/kern/proc/
+os161-1.99/kern/proc/proc.c
+os161-1.99/kern/vm/
+os161-1.99/kern/vm/kmalloc.c
+os161-1.99/kern/vm/uw-vmstats.c
+os161-1.99/kern/vm/copyinout.c
+os161-1.99/kern/synchprobs/
+os161-1.99/kern/synchprobs/catmouse.c
+os161-1.99/kern/synchprobs/whalemating.c
+os161-1.99/kern/synchprobs/traffic_synch.c
+os161-1.99/kern/synchprobs/catmouse_synch.c
+os161-1.99/kern/synchprobs/traffic.c
+os161-1.99/kern/include/
+os161-1.99/kern/include/synchprobs.h
+os161-1.99/kern/include/array.h
+os161-1.99/kern/include/uio.h
+os161-1.99/kern/include/bitmap.h
+os161-1.99/kern/include/device.h
+os161-1.99/kern/include/uw-vmstats.h
+os161-1.99/kern/include/synch.h
+os161-1.99/kern/include/vm.h
+os161-1.99/kern/include/signal.h
+os161-1.99/kern/include/queue.h
+os161-1.99/kern/include/cpu.h
+os161-1.99/kern/include/sfs.h
+os161-1.99/kern/include/proc.h
+os161-1.99/kern/include/stdarg.h
+os161-1.99/kern/include/vfs.h
+os161-1.99/kern/include/types.h
+os161-1.99/kern/include/fs.h
+os161-1.99/kern/include/spl.h
+os161-1.99/kern/include/setjmp.h
+os161-1.99/kern/include/current.h
+os161-1.99/kern/include/thread.h
+os161-1.99/kern/include/threadlist.h
+os161-1.99/kern/include/version.h
+os161-1.99/kern/include/elf.h
+os161-1.99/kern/include/endian.h
+os161-1.99/kern/include/syscall.h
+os161-1.99/kern/include/limits.h
+os161-1.99/kern/include/clock.h
+os161-1.99/kern/include/spinlock.h
+os161-1.99/kern/include/addrspace.h
+os161-1.99/kern/include/stat.h
+os161-1.99/kern/include/wchan.h
+os161-1.99/kern/include/test.h
+os161-1.99/kern/include/kern/
+os161-1.99/kern/include/kern/resource.h
+os161-1.99/kern/include/kern/errmsg.h
+os161-1.99/kern/include/kern/signal.h
+os161-1.99/kern/include/kern/sfs.h
+os161-1.99/kern/include/kern/seek.h
+os161-1.99/kern/include/kern/types.h
+os161-1.99/kern/include/kern/wait.h
+os161-1.99/kern/include/kern/socket.h
+os161-1.99/kern/include/kern/stattypes.h
+os161-1.99/kern/include/kern/reboot.h
+os161-1.99/kern/include/kern/endian.h
+os161-1.99/kern/include/kern/syscall.h
+os161-1.99/kern/include/kern/unistd.h
+os161-1.99/kern/include/kern/limits.h
+os161-1.99/kern/include/kern/time.h
+os161-1.99/kern/include/kern/errno.h
+os161-1.99/kern/include/kern/iovec.h
+os161-1.99/kern/include/kern/stat.h
+os161-1.99/kern/include/kern/ioctl.h
+os161-1.99/kern/include/kern/fcntl.h
+os161-1.99/kern/include/vnode.h
+os161-1.99/kern/include/copyinout.h
+os161-1.99/kern/include/lib.h
+os161-1.99/kern/include/threadprivate.h
+os161-1.99/kern/include/emufs.h
+os161-1.99/kern/include/cdefs.h
+os161-1.99/kern/include/mainbus.h
+os161-1.99/kern/vfs/
+os161-1.99/kern/vfs/device.c
+os161-1.99/kern/vfs/vfslist.c
+os161-1.99/kern/vfs/vfscwd.c
+os161-1.99/kern/vfs/vfspath.c
+os161-1.99/kern/vfs/vfslookup.c
+os161-1.99/kern/vfs/vnode.c
+os161-1.99/kern/vfs/devnull.c
+os161-1.99/kern/thread/
+os161-1.99/kern/thread/spl.c
+os161-1.99/kern/thread/thread.c
+os161-1.99/kern/thread/threadlist.c
+os161-1.99/kern/thread/synch.c
+os161-1.99/kern/thread/spinlock.c
+os161-1.99/kern/thread/clock.c
+/u/cs350/bin/cs350_submit: submitting os161kern.tgz  to CS350 course account
+############ OUTPUT FROM submit ###################
+Assignment 2a submissions are not late yet.
+You have submitted 0 of 1000 permitted late assignments, 
+so you may submit 1000 more.
+"./os161kern.tgz" copied successfully.
+
+In total, 1 files were copied successfully.
+
+Currently submitted files of b7song (assignment 2a):
+
+       Size     Time     Name
+-----------+------------+-----------
+     202286 Jun 15 21:55 os161kern.tgz
+
+total files: 1
+
+
+Please check this against what you wanted to submit.
+
+**********************************************************************
+NOTE: You are responsible for submitting correctly and on time
+      You can check what you submitted with the -l option
+      If you have ANY doubts, please contact tutor BEFORE the due-date
+**********************************************************************
+############ END OF OUTPUT FROM submit ###################
+/u/cs350/bin/cs350_submit: submission is complete!
+    This submission *replaces* any previous submissions that
+    you may have made for assignment 2a.
+
+Now compiling your submission in the course environment
+Using: /u/cs350/bin/cs350_build 2a
+This is cs350_build for cs350 assignment 2a.
+Starting 06/15/16 21:55:39 @ubuntu1404-006
+--->  Copying OS/161 source code for b7song
+--->  Configuring OS/161
+--->  Configuring kernel
+--->  Running kernel make depend
+--->  Running kernel make
+--->  Installing OS/161 kernel
+--->  Making user-level applications
+The logs are available for retrieval: /u/cs350/cs350_build_results/2a/b7song/logs/
+The compiled kernel can be retrieved from: /u/cs350/cs350_build_results/2a/b7song/root/
+Done 06/15/16 21:56:22.
+
+cs350_submit is now exiting
