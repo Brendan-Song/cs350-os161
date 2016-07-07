@@ -27,6 +27,7 @@
  * SUCH DAMAGE.
  */
 
+#include "opt-A2.h"
 #include <types.h>
 #include <kern/errno.h>
 #include <kern/reboot.h>
@@ -95,16 +96,29 @@ cmd_progthread(void *ptr, unsigned long nargs)
 
 	KASSERT(nargs >= 1);
 
+#if OPT_A2
+	//kprintf("%s\n",args[0]);
+	//kprintf("%s\n",args[1]);
+	//kprintf("%s\n",args[2]);
+		
+#else
+
 	if (nargs > 2) {
 		kprintf("Warning: argument passing from menu not supported\n");
 	}
+#endif
 
 	/* Hope we fit. */
 	KASSERT(strlen(args[0]) < sizeof(progname));
 
 	strcpy(progname, args[0]);
 
+#if OPT_A2
+	args[nargs] = NULL;
+	result = runprogram(progname, args);
+#else
 	result = runprogram(progname);
+#endif
 	if (result) {
 		kprintf("Running program %s failed: %s\n", args[0],
 			strerror(result));

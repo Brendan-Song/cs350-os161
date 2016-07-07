@@ -45,6 +45,7 @@
 #include <vfs.h>
 #include <syscall.h>
 #include <test.h>
+#include <copyinout.h>
 
 /*
  * Load program "progname" and start running it in usermode.
@@ -53,19 +54,26 @@
  * Calls vfs_open on progname and thus may destroy it.
  */
 int
-runprogram(char *progname)
+runprogram(char *progname, char **args)
 {
 	struct addrspace *as;
 	struct vnode *v;
 	vaddr_t entrypoint, stackptr;
 	int result;
 
+#if OPT_A2
+	// Count # of args
+	int argc = 0;
+	while (args[argc] != NULL) {
+		argc++;
+	}
+#endif
+
 	/* Open the file. */
 	result = vfs_open(progname, O_RDONLY, 0, &v);
 	if (result) {
 		return result;
 	}
-
 	/* We should be a new process. */
 	KASSERT(curproc_getas() == NULL);
 
@@ -98,10 +106,44 @@ runprogram(char *progname)
 		return result;
 	}
 
+#if OPT_A2
+	// copy arguments into new address space
+	vaddr_t stack[argc + 1]; // + 1 for NULL terminator
+	size_t argsize;
+
+	// 8 byte align the stack in prep for args
+	stackptr = ROUNDUP(stackptr - 8, 8);
+	
+	// put actual strings onto the stack
+	// strings don't have to be 4 or 8 byte aligned
+	for (int i = argc - 1; i >= 0; i--) {
+		int size = strlen(args[i]) + 1; // + 1 for '\0' character
+		stackptr -= size; // make space on the stack
+		copyoutstr(args[i], (userptr_t)stackptr, size, &argsize);
+		stack[i] = stackptr;
+	}
+
+	// 4 byte align the stack in prep for string pointers
+	stackptr = ROUNDUP(stackptr - 4, 4);
+	stackptr -= 4; // create space for the NULL arg
+
+	// NULL terminate arg array
+	stack[argc] = (vaddr_t)NULL;
+	
+	// put string pointers onto the stack
+	// pointers to strings must be 4 byte aligned
+	for (int i = argc - 1; i >= 0; i--) {
+		stackptr -= ROUNDUP(sizeof(stack[i]), 4); // make space on the stack (4 byte aligned)
+		copyout(&stack[i], (userptr_t)stackptr, sizeof(stack[i]));
+	}
+	
+	enter_new_process(argc, (userptr_t)stackptr, stackptr, entrypoint);
+#else
+
 	/* Warp to user mode. */
 	enter_new_process(0 /*argc*/, NULL /*userspace addr of argv*/,
 			  stackptr, entrypoint);
-	
+#endif	
 	/* enter_new_process does not return. */
 	panic("enter_new_process returned\n");
 	return EINVAL;

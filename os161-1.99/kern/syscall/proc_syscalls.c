@@ -238,27 +238,57 @@ sys_fork(struct trapframe *tf, pid_t *retval) {
 }
 
 int
-sys_execv(userptr_t progname, userptr_t args, pid_t *retval) {
+sys_execv(char *progname, char **args, pid_t *retval) {
   // Replaces currently executing program with a newly loaded program image
   // pid remains unchanged
   // Process:
-  // Count # of arguments and copy them into the kernel
-  // Copy the program path into the kernel
-  // Open the program file using vfs_open(prog_name, ...)
-  // Create new addr space, set process to the new addr space and activate it
-  // Using the opened prog file, load the prog image using load_elf
-  // Need to copy the arguments into the new addr space
-  // Delete old addr space
-  // Call enter_new_process
-  (void)args;
-  (void)retval;  
+  // 1. Count # of arguments
+  // 2. Copy args into the kernel
+  // 3. Copy the program path into the kernel
+  // 4. Open the program file using vfs_open(prog_name, ...)
+  // 5. Create new addr space, set process to the new addr space and activate it
+  // 6. Using the opened prog file, load the prog image using load_elf
+  // 7. Need to copy the arguments into the new addr space
+  // 8. Delete old addr space
+  // 9. Call enter_new_process
+  
+  (void)retval; // avoid warning
+  
+  // 1. Count # of arguments
+  int argc = 0;
+  while (args[argc] != NULL) {
+    argc++;
+  }
+
+  // 2. Copy args into the kernel
+  size_t argsize;
+  char **argv = (char **)kmalloc(sizeof(char *) * (argc + 1));
+  for (int i = 0; i < argc; i++) {
+    int size = strlen(args[i]) + 1;
+    argv[i] = (char *)kmalloc(sizeof(char) * size);
+    copyinstr((userptr_t)args[i], argv[i], size, &argsize);
+  }
+  
+  // NULL terminate args array
+  argv[argc] = NULL;
+
+  // 3. Copy program path into kernel
+  size_t psize;
+  int pathsize = strlen(progname) + 1;
+  char *path = (char *)kmalloc(sizeof(char *) * pathsize);
+  copyinstr((userptr_t)progname, path, pathsize, &psize);
+
+  // Keep current addrspace to be deleted
+  struct addrspace *oldAS = curproc_getas();
+
+  // This point forward is copy/pasted runprogram with a few minor changes
   struct addrspace *as;
   struct vnode *v;
   vaddr_t entrypoint, stackptr;
   int result;
 
   /* Open the file. */
-  result = vfs_open((char *)progname, O_RDONLY, 0, &v);
+  result = vfs_open(path, O_RDONLY, 0, &v);
   if (result) {
     return result;
   }
@@ -295,14 +325,41 @@ sys_execv(userptr_t progname, userptr_t args, pid_t *retval) {
     return result;
   }
 
-  /* Warp to user mode. */
-  enter_new_process(0 /*argc*/, NULL /*userspace addr of argv*/,
-		    stackptr, entrypoint);
+  // copy arguments into new address space
+  vaddr_t stack[argc + 1]; // + 1 for NULL terminator
+  
+  // 8 byte align the stack in prep for args
+  stackptr = ROUNDUP(stackptr - 8, 8);
+  
+  // put actual strings onto the stack
+  // strings don't have to be 4 or 8 byte aligned
+  for (int i = argc - 1; i >= 0; i--) {
+    int size = strlen(argv[i]) + 1; // + 1 for '\0' character
+    stackptr -= size; // make space on the stack
+    copyoutstr(argv[i], (userptr_t)stackptr, size, &argsize);
+    stack[i] = stackptr;
+  }
+  
+  // 4 byte align the stack in prep for string pointers
+  stackptr = ROUNDUP(stackptr - 4, 4);
+  stackptr -= 4; // create space for the NULL arg
+  
+  // NULL terminate arg array
+  stack[argc] = (vaddr_t)NULL;
+  
+  // put string pointers onto the stack
+  // pointers to strings must be 4 byte aligned
+  for (int i = argc - 1; i >= 0; i--) {
+    stackptr -= ROUNDUP(sizeof(stack[i]), 4); // make space on the stack (4 byte aligned)
+    copyout(&stack[i], (userptr_t)stackptr, sizeof(stack[i]));
+  }
+
+  as_destroy(oldAS);
+  
+  enter_new_process(argc, (userptr_t)stackptr, stackptr, entrypoint);
 
   /* enter_new_process does not return. */
   panic("enter_new_process returned\n");
   return EINVAL;
-
-  return(0);
 }
 #endif
