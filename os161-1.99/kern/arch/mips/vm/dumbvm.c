@@ -27,6 +27,7 @@
  * SUCH DAMAGE.
  */
 
+#include "opt-A3.h"
 #include <types.h>
 #include <kern/errno.h>
 #include <lib.h>
@@ -189,6 +190,26 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 
 	for (i=0; i<NUM_TLB; i++) {
 		tlb_read(&ehi, &elo, i);
+#if OPT_A3
+		// TODO:
+		// check if the addrspace has been loaded
+		// // yes ==> make text segment read only
+		// // use as_define_region to get text segment
+		bool full = false;
+		if (elo & TLBLO_VALID) {
+			full = true;
+		}
+		ehi = faultaddress;
+		elo = paddr | TLBLO_DIRTY | TLBLO_VALID;
+		DEBUG(DB_VM, "dumbvm: 0x%x -> 0x%x\n", faultaddress, paddr);
+		if (full) {
+			tlb_random(ehi, elo);
+		} else {
+			tlb_write(ehi, elo, i);
+		}
+		splx(spl);
+		return 0;
+#else
 		if (elo & TLBLO_VALID) {
 			continue;
 		}
@@ -198,8 +219,8 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		tlb_write(ehi, elo, i);
 		splx(spl);
 		return 0;
+#endif
 	}
-
 	kprintf("dumbvm: Ran out of TLB entries - cannot handle page fault\n");
 	splx(spl);
 	return EFAULT;

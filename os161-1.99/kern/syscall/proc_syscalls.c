@@ -1,3 +1,4 @@
+#include "opt-A3.h"
 #include "opt-A2.h"
 #include <types.h>
 #include <kern/errno.h>
@@ -314,6 +315,17 @@ sys_execv(char *progname, char **args, pid_t *retval) {
     vfs_close(v);
     return result;
   }
+
+#if OPT_A3
+  // load_elf completed
+  // TODO:
+  // flush TLB
+  // // load in TLBHI_INVALID(index)
+  // // load in TLBLO_INVALID()
+  // ensure text segments have TLBLO_DIRTY off
+  // // use elo &= ~TLBLO_DIRTY;
+  
+#endif
 
   /* Done with the file now. */
   vfs_close(v);
