@@ -318,6 +318,7 @@ sys_execv(char *progname, char **args, pid_t *retval) {
 
 #if OPT_A3
   // load_elf completed
+  // as->as_loaded = true;
   // TODO:
   // flush TLB
   // // load in TLBHI_INVALID(index)

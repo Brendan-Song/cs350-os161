@@ -50,6 +50,7 @@
  * linker). And you'd have to write a dynamic linker...
  */
 
+#include "opt-A3.h"
 #include <types.h>
 #include <kern/errno.h>
 #include <lib.h>
@@ -59,6 +60,8 @@
 #include <addrspace.h>
 #include <vnode.h>
 #include <elf.h>
+#include <mips/tlb.h>
+#include <spl.h>
 
 /*
  * Load a segment at virtual address VADDR. The segment in memory
@@ -300,6 +303,22 @@ load_elf(struct vnode *v, vaddr_t *entrypoint)
 	if (result) {
 		return result;
 	}
+
+#if OPT_A3
+	// indicate load_elf has completed
+	//as->as_loaded = true;
+
+	// flush out TLB
+	// disable interrupts while flushing TLB
+	//int spl = splhigh();
+
+	//for (int i = 0; i < NUM_TLB; i++) {
+	//	tlb_write(TLBHI_INVALID(i), TLBLO_INVALID(), i);
+	//}
+
+	// done flushing, enable interrupts
+	//splx(spl);
+#endif
 
 	*entrypoint = eh.e_entry;
 

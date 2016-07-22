@@ -27,6 +27,7 @@
  * SUCH DAMAGE.
  */
 
+#include "opt-A3.h"
 #include <types.h>
 #include <signal.h>
 #include <lib.h>
@@ -39,6 +40,8 @@
 #include <vm.h>
 #include <mainbus.h>
 #include <syscall.h>
+#include <addrspace.h>
+#include <proc.h>
 
 
 /* in exception.S */
@@ -86,6 +89,33 @@ kill_curthread(vaddr_t epc, unsigned code, vaddr_t vaddr)
 		sig = SIGABRT;
 		break;
 	    case EX_MOD:
+#if OPT_A3
+		// trying to write to a read-only page
+		sig = SIGCHLD; // child process exited
+
+		// kill the process instead of panicing
+		// sys__exit:
+		// get as and proc
+		struct addrspace *as;
+		struct proc *p = curproc;
+
+		// deactivate and destroy as
+		as_deactivate();
+		as = curproc_setas(NULL);
+		as_destroy(as);
+
+		// detach thread from proc
+		proc_remthread(curthread);
+
+		// destroy proc
+		proc_destroy(p);
+
+		// exit thread
+		thread_exit();
+
+		// should never reach here
+		panic("return from thread_exit in kill_curthread\n");
+#endif
 	    case EX_TLBL:
 	    case EX_TLBS:
 		sig = SIGSEGV;

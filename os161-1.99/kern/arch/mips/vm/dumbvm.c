@@ -121,8 +121,13 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 
 	switch (faulttype) {
 	    case VM_FAULT_READONLY:
+#if OPT_A3
+		// kill the current process, don't panic
+		return EINVAL;
+#else
 		/* We always create pages read-write, so we can't get this */
 		panic("dumbvm: got VM_FAULT_READONLY\n");
+#endif
 	    case VM_FAULT_READ:
 	    case VM_FAULT_WRITE:
 		break;
@@ -168,9 +173,11 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	vtop2 = vbase2 + as->as_npages2 * PAGE_SIZE;
 	stackbase = USERSTACK - DUMBVM_STACKPAGES * PAGE_SIZE;
 	stacktop = USERSTACK;
+	bool textSegment = false;
 
 	if (faultaddress >= vbase1 && faultaddress < vtop1) {
 		paddr = (faultaddress - vbase1) + as->as_pbase1;
+		textSegment = true;
 	}
 	else if (faultaddress >= vbase2 && faultaddress < vtop2) {
 		paddr = (faultaddress - vbase2) + as->as_pbase2;
@@ -191,24 +198,31 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	for (i=0; i<NUM_TLB; i++) {
 		tlb_read(&ehi, &elo, i);
 #if OPT_A3
-		// TODO:
-		// check if the addrspace has been loaded
-		// // yes ==> make text segment read only
-		// // use as_define_region to get text segment
 		bool full = false;
-		if (elo & TLBLO_VALID) {
+		if (elo & TLBLO_VALID && i == NUM_TLB - 1) {
+			// reached end of TLB, we know it is full
 			full = true;
+		} else if (elo & TLBLO_VALID) {
+			// not at end of TLB but current slot is occupied
+			continue;
 		}
 		ehi = faultaddress;
-		elo = paddr | TLBLO_DIRTY | TLBLO_VALID;
-		DEBUG(DB_VM, "dumbvm: 0x%x -> 0x%x\n", faultaddress, paddr);
+		if (textSegment && as->as_loaded) {
+			// addrspace is done loading and we're in read-only space
+			elo = (paddr | TLBLO_VALID) & ~TLBLO_DIRTY;
+		} else {
+			// addrspace not done loading or we're in writable space
+			elo = paddr | TLBLO_DIRTY | TLBLO_VALID;
+		}
 		if (full) {
+			// kick something random out
 			tlb_random(ehi, elo);
 		} else {
 			tlb_write(ehi, elo, i);
 		}
 		splx(spl);
 		return 0;
+	}
 #else
 		if (elo & TLBLO_VALID) {
 			continue;
@@ -219,8 +233,8 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		tlb_write(ehi, elo, i);
 		splx(spl);
 		return 0;
-#endif
 	}
+#endif
 	kprintf("dumbvm: Ran out of TLB entries - cannot handle page fault\n");
 	splx(spl);
 	return EFAULT;
@@ -241,6 +255,9 @@ as_create(void)
 	as->as_pbase2 = 0;
 	as->as_npages2 = 0;
 	as->as_stackpbase = 0;
+#if OPT_A3
+	as->as_loaded = false;
+#endif
 
 	return as;
 }
@@ -359,7 +376,11 @@ as_prepare_load(struct addrspace *as)
 int
 as_complete_load(struct addrspace *as)
 {
+#if OPT_A3
+	as->as_loaded = true;
+#else
 	(void)as;
+#endif
 	return 0;
 }
 
