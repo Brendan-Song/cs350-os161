@@ -34,8 +34,18 @@
  * Address space structure and operations.
  */
 
-
+#include "opt-A3.h"
 #include <vm.h>
+
+#if OPT_A3
+struct pagetable {
+	int frame;
+	paddr_t paddr;
+	bool readable;
+	bool writeable;
+	bool executable;
+};
+#endif
 
 struct vnode;
 
@@ -47,6 +57,18 @@ struct vnode;
  * You write this.
  */
 
+#if OPT_A3
+struct addrspace {
+  vaddr_t as_text_vbase;
+  struct pagetable *as_text_ptable;
+  size_t as_text_npages;
+  vaddr_t as_data_vbase;
+  struct pagetable *as_data_ptable;
+  size_t as_data_npages;
+  struct pagetable *as_stack_ptable;
+  bool as_loaded;
+};
+#else
 struct addrspace {
   vaddr_t as_vbase1;
   paddr_t as_pbase1;
@@ -55,8 +77,8 @@ struct addrspace {
   paddr_t as_pbase2;
   size_t as_npages2;
   paddr_t as_stackpbase;
-  bool as_loaded;
 };
+#endif
 
 /*
  * Functions in addrspace.c:

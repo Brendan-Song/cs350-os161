@@ -38,6 +38,7 @@
 #include <mips/tlb.h>
 #include <addrspace.h>
 #include <vm.h>
+#include <copyinout.h>
 
 /*
  * Dumb MIPS-only "VM system" that is intended to only be just barely
@@ -52,11 +53,65 @@
  */
 static struct spinlock stealmem_lock = SPINLOCK_INITIALIZER;
 
+#if OPT_A3
+// map vaddr to paddr and keep track of permissions
+//struct pagetable {
+//	vaddr_t vaddr;
+//	paddr_t paddr;
+//	bool readable;
+//	bool writable;
+//	bool executable;
+//};
+
+// coremap shoud store:
+// which frames are used and available
+// contiguous mem allocations
+struct coremap {
+	bool available;
+	int numContiguous;
+	paddr_t address;
+};
+
+struct coremap *coremap;
+bool coremapLoaded = false;
+int numFrames;
+
+void
+vm_bootstrap(void)
+{
+	// call ram_getsize to get remaining physical mem
+	paddr_t lo, hi;
+	ram_getsize(&lo, &hi);
+
+	// logically partition into fixed size frames
+	numFrames = (hi - lo) / PAGE_SIZE;
+
+	// store coremap at start of ram_getsize
+	coremap = (struct coremap *)PADDR_TO_KVADDR(lo);
+	lo = ROUNDUP(lo + numFrames * (sizeof(struct coremap)), PAGE_SIZE);
+
+	// update usable frames
+	numFrames = (hi - lo) / PAGE_SIZE;
+
+	// initialize coremap
+	paddr_t page = lo;
+	for (int i = 0; i < numFrames; i++) {
+		coremap[i].available = true;
+		coremap[i].numContiguous = 0;
+		coremap[i].address = page;
+		page += PAGE_SIZE;
+	}
+
+	// coremap has finished initialization
+	coremapLoaded = true;
+}
+#else
 void
 vm_bootstrap(void)
 {
 	/* Do nothing. */
 }
+#endif
 
 static
 paddr_t
@@ -66,10 +121,47 @@ getppages(unsigned long npages)
 
 	spinlock_acquire(&stealmem_lock);
 
+#if OPT_A3
+	if (!coremapLoaded) {
+		// still starting up, just stealmem
+		addr = ram_stealmem(npages);
+		spinlock_release(&stealmem_lock);
+		return addr;
+	} else {
+		// must allocate a contiguous block
+		for (int i = 0; i < numFrames; i++) {
+			int start = i; // save starting index
+			bool canAlloc = true; // assume continuous block
+			if (coremap[i].available) {
+				// check next npages
+				for (int k = 0; k < (int)npages; k++) {
+					i = start + k;
+					if (i >= numFrames || !coremap[i].available) {
+						canAlloc = false;
+						break;
+					}
+				}
+				// contiguous block found
+				if (canAlloc) {
+					for (int k = 0; k < (int)npages; k++) {
+						coremap[start + k].available = false;
+					}
+					coremap[start].numContiguous = (int)npages;
+					spinlock_release(&stealmem_lock);
+					return coremap[start].address;
+				}
+			}
+		}
+		// could not allocate, out of mem
+		spinlock_release(&stealmem_lock);
+		return ENOMEM;
+	}
+#else
 	addr = ram_stealmem(npages);
-	
+
 	spinlock_release(&stealmem_lock);
 	return addr;
+#endif
 }
 
 /* Allocate/free some kernel-space virtual pages */
@@ -81,15 +173,39 @@ alloc_kpages(int npages)
 	if (pa==0) {
 		return 0;
 	}
+#if OPT_A3
+	else if (pa == ENOMEM) {
+		return ENOMEM;
+	}
+#endif
 	return PADDR_TO_KVADDR(pa);
 }
 
 void 
 free_kpages(vaddr_t addr)
 {
+#if OPT_A3
+	spinlock_acquire(&stealmem_lock);
+
+	if (coremapLoaded) {
+		for (int i = 0; i < numFrames; i++) {
+			if (addr == coremap[i].address) {
+				int npages = coremap[i].numContiguous;
+				coremap[i].numContiguous = 0;
+				for (int k = 0; k < npages; k++) {
+					coremap[i + k].available = true;
+				}
+				break;
+			}
+		}
+	}
+
+	spinlock_release(&stealmem_lock);
+#else
 	/* nothing - leak the memory. */
 
 	(void)addr;
+#endif
 }
 
 void
@@ -153,6 +269,32 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		return EFAULT;
 	}
 
+#if OPT_A3
+	vbase1 = as->as_text_vbase;
+        vtop1 = vbase1 + as->as_text_npages * PAGE_SIZE;
+	vbase2 = as->as_data_vbase;
+	vtop2 = vbase2 + as->as_data_npages * PAGE_SIZE;
+	stackbase = USERSTACK - DUMBVM_STACKPAGES * PAGE_SIZE;
+	stacktop = USERSTACK;
+	bool readOnly = false;
+	
+	if (faultaddress >= vbase1 && faultaddress < vtop1) {
+		vaddr_t vframe = (faultaddress - vbase1) / PAGE_SIZE; 
+		paddr = (faultaddress - vbase1) + as->as_text_ptable[vframe].paddr;
+		readOnly = !as->as_text_ptable[vframe].writeable;
+	} else if (faultaddress >= vbase2 && faultaddress < vtop2) {
+		vaddr_t vframe = (faultaddress - vbase2) / PAGE_SIZE;
+		paddr = (faultaddress - vbase2) + as->as_data_ptable[vframe].paddr;
+		readOnly = !as->as_data_ptable[vframe].writeable;
+	} else if (faultaddress >= stackbase && faultaddress < stacktop) {
+		vaddr_t vframe = (faultaddress - stackbase) / PAGE_SIZE;
+		paddr = (faultaddress - stackbase) + as->as_stack_ptable[vframe].paddr;
+		readOnly = !as->as_stack_ptable[vframe].writeable;
+	} else {
+	        return EFAULT;
+	}
+#else
+
 	/* Assert that the address space has been set up properly. */
 	KASSERT(as->as_vbase1 != 0);
 	KASSERT(as->as_pbase1 != 0);
@@ -173,11 +315,9 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	vtop2 = vbase2 + as->as_npages2 * PAGE_SIZE;
 	stackbase = USERSTACK - DUMBVM_STACKPAGES * PAGE_SIZE;
 	stacktop = USERSTACK;
-	bool textSegment = false;
 
 	if (faultaddress >= vbase1 && faultaddress < vtop1) {
 		paddr = (faultaddress - vbase1) + as->as_pbase1;
-		textSegment = true;
 	}
 	else if (faultaddress >= vbase2 && faultaddress < vtop2) {
 		paddr = (faultaddress - vbase2) + as->as_pbase2;
@@ -191,6 +331,8 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 
 	/* make sure it's page-aligned */
 	KASSERT((paddr & PAGE_FRAME) == paddr);
+
+#endif
 
 	/* Disable interrupts on this CPU while frobbing the TLB. */
 	spl = splhigh();
@@ -207,7 +349,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 			continue;
 		}
 		ehi = faultaddress;
-		if (textSegment && as->as_loaded) {
+		if (readOnly && as->as_loaded) {
 			// addrspace is done loading and we're in read-only space
 			elo = (paddr | TLBLO_VALID) & ~TLBLO_DIRTY;
 		} else {
@@ -248,6 +390,16 @@ as_create(void)
 		return NULL;
 	}
 
+#if OPT_A3
+	as->as_text_vbase = 0;
+	// as->as_text_ptable;
+	as->as_text_npages = 0;
+	as->as_data_vbase = 0;
+	// as->as_data_ptable;
+	as->as_data_npages = 0;
+	//as->as_stack_ptable = kmalloc(DUMBVM_STACKPAGES * sizeof(struct pagetable));
+	as->as_loaded = false;
+#else
 	as->as_vbase1 = 0;
 	as->as_pbase1 = 0;
 	as->as_npages1 = 0;
@@ -255,8 +407,6 @@ as_create(void)
 	as->as_pbase2 = 0;
 	as->as_npages2 = 0;
 	as->as_stackpbase = 0;
-#if OPT_A3
-	as->as_loaded = false;
 #endif
 
 	return as;
@@ -265,6 +415,25 @@ as_create(void)
 void
 as_destroy(struct addrspace *as)
 {
+#if OPT_A3
+	// call free_kpages on the frames for each seg
+	for (int i = 0; i < (int)as->as_text_npages; i++) {
+		free_kpages(as->as_text_ptable[i].paddr);
+	}
+
+	for (int i = 0; i < (int)as->as_data_npages; i++) {
+		free_kpages(as->as_data_ptable[i].paddr);
+	}
+
+	for (int i = 0; i < DUMBVM_STACKPAGES; i++) {
+		free_kpages(as->as_stack_ptable[i].paddr);
+	}
+
+	// free page tables
+	kfree(as->as_text_ptable);
+	kfree(as->as_data_ptable);
+	kfree(as->as_stack_ptable);
+#endif
 	kfree(as);
 }
 
@@ -273,6 +442,7 @@ as_activate(void)
 {
 	int i, spl;
 	struct addrspace *as;
+
 
 	as = curproc_getas();
 #ifdef UW
@@ -313,6 +483,35 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 
 	npages = sz / PAGE_SIZE;
 
+#if OPT_A3
+
+	// set up text seg
+	if (as->as_text_vbase == 0) {
+		as->as_text_ptable = kmalloc(npages * sizeof(struct pagetable));
+		for (int i = 0; i < (int)npages; i++) {
+			as->as_text_ptable[i].readable = readable;
+			as->as_text_ptable[i].writeable = writeable;
+			as->as_text_ptable[i].executable = executable;
+		}
+		as->as_text_vbase = vaddr;
+		as->as_text_npages = npages;
+		return 0;
+	}
+
+	// set up data seg
+	if (as->as_data_vbase == 0) {
+		as->as_data_ptable = kmalloc(npages * sizeof(struct pagetable));
+		for (int i = 0; i < (int)npages; i++) {
+			as->as_data_ptable[i].readable = readable;
+			as->as_data_ptable[i].writeable = writeable;
+			as->as_data_ptable[i].executable = executable;
+		}
+		as->as_data_vbase = vaddr;
+		as->as_data_npages = npages;
+		return 0;
+	}
+
+#else
 	/* We don't use these - all pages are read-write */
 	(void)readable;
 	(void)writeable;
@@ -330,6 +529,7 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 		return 0;
 	}
 
+#endif
 	/*
 	 * Support for more than two regions is not available.
 	 */
@@ -341,12 +541,55 @@ static
 void
 as_zero_region(paddr_t paddr, unsigned npages)
 {
+#if OPT_A3
+	(void)paddr;
+	(void)npages;
+#else
 	bzero((void *)PADDR_TO_KVADDR(paddr), npages * PAGE_SIZE);
+#endif
 }
 
 int
 as_prepare_load(struct addrspace *as)
 {
+#if OPT_A3
+	// preallocate frames for each page in the segment
+	//vaddr_t text_vaddr = as->as_text_vbase;
+	for (int i = 0; i < (int)as->as_text_npages; i++) {
+		as->as_text_ptable[i].frame = i;
+		// allocate each frame one at a time
+		as->as_text_ptable[i].paddr = getppages(1);
+		if (as->as_text_ptable[i].paddr == 0) {
+			return ENOMEM;
+		}
+	//	text_vaddr += PAGE_SIZE;
+	}
+
+	//vaddr_t data_vaddr = as->as_data_vbase;
+	for (int i = 0; i < (int)as->as_data_npages; i++) {
+		as->as_data_ptable[i].frame = i;
+		// allocate each frame one at a time
+		as->as_data_ptable[i].paddr = getppages(1);
+		if (as->as_data_ptable[i].paddr == 0) {
+			return ENOMEM;
+		}
+	//	data_vaddr += PAGE_SIZE;
+	}
+
+/*	for (int i = 0; i < DUMBVM_STACKPAGES; i++) {
+		as->as_stack_ptable[i].vaddr = data_vaddr; // virtual memory is contiguous
+		// allocate each frame one at a time
+		as->as_stack_ptable[i].paddr = getppages(1);
+		if (as->as_stack_ptable[i].paddr == 0) {
+			return ENOMEM;
+		}
+		data_vaddr += PAGE_SIZE;
+	}*/
+
+	as_zero_region(as->as_text_ptable[0].paddr, as->as_text_npages); // avoid warning
+
+	return 0;
+#else
 	KASSERT(as->as_pbase1 == 0);
 	KASSERT(as->as_pbase2 == 0);
 	KASSERT(as->as_stackpbase == 0);
@@ -371,6 +614,7 @@ as_prepare_load(struct addrspace *as)
 	as_zero_region(as->as_stackpbase, DUMBVM_STACKPAGES);
 
 	return 0;
+#endif
 }
 
 int
@@ -387,21 +631,85 @@ as_complete_load(struct addrspace *as)
 int
 as_define_stack(struct addrspace *as, vaddr_t *stackptr)
 {
+#if OPT_A3
+	// always allocate NUM_STACK_PAGES for the stack
+	// need to create a page table for the stack
+	as->as_stack_ptable = kmalloc(DUMBVM_STACKPAGES * sizeof(struct pagetable));
+
+	// need to allocate frames for the stack
+	//vaddr_t stack_vaddr = USERSTACK;
+	for (int i = 0; i < DUMBVM_STACKPAGES; i++) {
+		as->as_stack_ptable[i].frame = i;
+		// allocate each frame one at a time
+		as->as_stack_ptable[i].paddr = getppages(1);
+		if (as->as_stack_ptable[i].paddr == 0) {
+			return ENOMEM;
+		}
+	//	stack_vaddr += PAGE_SIZE;
+	}
+
+	*stackptr = USERSTACK;
+	return 0;
+#else
 	KASSERT(as->as_stackpbase != 0);
 
 	*stackptr = USERSTACK;
 	return 0;
+#endif
 }
 
 int
 as_copy(struct addrspace *old, struct addrspace **ret)
 {
+
 	struct addrspace *new;
 
 	new = as_create();
 	if (new==NULL) {
 		return ENOMEM;
 	}
+
+#if OPT_A3
+	// create segments based on old addrspace
+	new->as_text_vbase = old->as_text_vbase;
+	new->as_text_npages = old->as_text_npages;
+	new->as_data_vbase = old->as_data_vbase;
+	new->as_data_npages = old->as_data_npages;
+
+	// alloc frames for segs
+	if (as_prepare_load(new)) {
+		as_destroy(new);
+		return ENOMEM;
+	}
+	new->as_text_ptable = kmalloc(new->as_text_npages * sizeof(struct pagetable));
+	new->as_data_ptable = kmalloc(new->as_data_npages * sizeof(struct pagetable));
+	if (as_define_stack(new, (vaddr_t *)USERSTACK)) {
+		as_destroy(new);
+		return ENOMEM;
+	}
+
+	// memcpy frames from old addrspace to frames in new addrspace
+	for (int i = 0; i < (int)new->as_text_npages; i++) {
+		//copyout(new->as_text_ptable[i], old->as_text_ptable[i], sizeof(struct pagetable));
+		memcpy((void *)PADDR_TO_KVADDR(new->as_text_ptable[i].paddr),
+			(const void *)PADDR_TO_KVADDR(old->as_text_ptable[i].paddr),
+			PAGE_SIZE);
+	}
+	for (int i = 0; i < (int)new->as_data_npages; i++) {
+		//copyout(new->as_data_ptable[i], old->as_data_ptable[i], sizeof(struct pagetable));
+		memcpy((void *)PADDR_TO_KVADDR(new->as_text_ptable[i].paddr),
+			(const void *)PADDR_TO_KVADDR(old->as_text_ptable[i].paddr),
+			PAGE_SIZE);
+	}
+	for (int i = 0; i < DUMBVM_STACKPAGES; i++) {
+		memcpy((void *)PADDR_TO_KVADDR(new->as_stack_ptable[i].paddr),
+			(const void *)PADDR_TO_KVADDR(old->as_stack_ptable[i].paddr),
+			PAGE_SIZE);
+	}
+
+	*ret = new;
+	return 0;
+#else
 
 	new->as_vbase1 = old->as_vbase1;
 	new->as_npages1 = old->as_npages1;
@@ -432,4 +740,5 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 	
 	*ret = new;
 	return 0;
+#endif
 }
